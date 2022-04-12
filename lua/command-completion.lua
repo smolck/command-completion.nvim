@@ -42,29 +42,45 @@ local function setup_handlers()
   n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
   vim.cmd([[ redraw ]])
 
-  M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, { callback = function()
-    n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
+  M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, {
+    callback = function()
+      n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
-    local input = f.getcmdline()
-    local completions = f.getcompletion(input, 'cmdline')
+      local input = f.getcmdline()
+      local completions = f.getcompletion(input, 'cmdline')
 
-    local i = 1
-    for line = 0, height do
-      for col = 0, math.floor(vim.o.columns / col_width) - 1 do
-        if i > #completions then
-          break
+      -- TODO(smolck): This *should* only apply to suggestions that are files, but
+      -- I'm not totally sure if that's right so might need to be properly tested.
+      -- (Or maybe find a better way of cutting down filepath suggestions to their tails?)
+      completions = vim.tbl_map(function(c)
+        local f1 = f.fnamemodify(c, ':p:t')
+        if f1 == '' then
+          -- This is for filepaths like '/Users/someuser/thing/', where if you get
+          -- the tail it's just empty.
+          return f.fnamemodify(c, ':p:h:t')
+        else
+          return f1
         end
-        local end_col = col * col_width + string.len(completions[i])
-        if end_col > vim.o.columns then
-          break
-        end
-        n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i] })
+      end, completions)
 
-        i = i + 1
+      local i = 1
+      for line = 0, height do
+        for col = 0, math.floor(vim.o.columns / col_width) - 1 do
+          if i > #completions then
+            break
+          end
+          local end_col = col * col_width + string.len(completions[i])
+          if end_col > vim.o.columns then
+            break
+          end
+          n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i] })
+
+          i = i + 1
+        end
       end
-    end
-    vim.cmd([[ redraw ]])
-  end})
+      vim.cmd([[ redraw ]])
+    end,
+  })
 end
 
 local function teardown_handlers()
@@ -76,17 +92,21 @@ end
 local enter_aucmd_id, leave_aucmd_id
 
 function M.setup()
-  enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, { callback = function()
-    debounce_timer = vim.defer_fn(setup_handlers, 100) -- TODO(smolck): Make this time configurable?
-  end})
-  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave', 'CmdwinLeave' }, { callback = function()
-    if debounce_timer then
-      debounce_timer:stop()
-      debounce_timer = nil
-    else
-      teardown_handlers()
-    end
-  end})
+  enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
+    callback = function()
+      debounce_timer = vim.defer_fn(setup_handlers, 100) -- TODO(smolck): Make this time configurable?
+    end,
+  })
+  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave', 'CmdwinLeave' }, {
+    callback = function()
+      if debounce_timer then
+        debounce_timer:stop()
+        debounce_timer = nil
+      else
+        teardown_handlers()
+      end
+    end,
+  })
 end
 
 function M.disable()
