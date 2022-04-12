@@ -18,7 +18,11 @@ local n = setmetatable({}, {
   end,
 })
 
+local debounce_timer
+
 local function setup_handlers()
+  debounce_timer = nil
+
   local height = math.floor(vim.o.lines * 0.3)
   local col_width = math.floor(vim.o.columns / 6)
   M.wbufnr = n.create_buf(false, true)
@@ -72,8 +76,17 @@ end
 local enter_aucmd_id, leave_aucmd_id
 
 function M.setup()
-  enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, { callback = setup_handlers })
-  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave', 'CmdwinLeave' }, { callback = teardown_handlers })
+  enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, { callback = function()
+    debounce_timer = vim.defer_fn(setup_handlers, 100) -- TODO(smolck): Make this time configurable?
+  end})
+  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave', 'CmdwinLeave' }, { callback = function()
+    if debounce_timer then
+      debounce_timer:stop()
+      debounce_timer = nil
+    else
+      teardown_handlers()
+    end
+  end})
 end
 
 function M.disable()
