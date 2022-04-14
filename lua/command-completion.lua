@@ -94,16 +94,20 @@ local enter_aucmd_id, leave_aucmd_id
 function M.setup()
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
-      debounce_timer = vim.defer_fn(setup_handlers, 100) -- TODO(smolck): Make this time configurable?
+      if vim.v.event.cmdtype == ':' then
+        debounce_timer = vim.defer_fn(setup_handlers, 100) -- TODO(smolck): Make this time configurable?
+      end
     end,
   })
   leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave', 'CmdwinLeave' }, {
     callback = function()
-      if debounce_timer then
-        debounce_timer:stop()
-        debounce_timer = nil
-      else
-        teardown_handlers()
+      if vim.v.event.cmdtype == ':' then
+        if debounce_timer then
+          debounce_timer:stop()
+          debounce_timer = nil
+        else
+          teardown_handlers()
+        end
       end
     end,
   })
