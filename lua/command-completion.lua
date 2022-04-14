@@ -1,6 +1,10 @@
 local M = {}
 local f = vim.fn
 
+local user_opts = {
+  border = false
+}
+
 local n = setmetatable({}, {
   __index = function(_, k)
     local maybe_thing = vim.api[k]
@@ -28,7 +32,7 @@ local function setup_handlers()
   M.wbufnr = n.create_buf(false, true)
   M.winid = n.open_win(M.wbufnr, false, {
     relative = 'editor',
-    border = 'single',
+    border = user_opts.border and 'single' or nil,
     style = 'minimal',
     width = vim.o.columns,
     height = height,
@@ -91,7 +95,12 @@ end
 
 local enter_aucmd_id, leave_aucmd_id
 
-function M.setup()
+function M.setup(opts)
+  opts = opts or {}
+  if opts.border then
+    user_opts.border = opts.border
+  end
+
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
