@@ -40,12 +40,11 @@ local function calc_col_width()
   return col_width
 end
 
-local function setup_handlers()
-  debounce_timer = nil
+local function open_and_setup_win(height)
+  if not M.wbufnr then
+    M.wbufnr = n.create_buf(false, true)
+  end
 
-  local height = math.floor(vim.o.lines * 0.3)
-  local col_width = calc_col_width()
-  M.wbufnr = n.create_buf(false, true)
   M.winid = n.open_win(M.wbufnr, false, {
     relative = 'editor',
     border = user_opts.border and 'single' or nil,
@@ -55,15 +54,30 @@ local function setup_handlers()
     row = vim.o.lines - 2,
     col = 0,
   })
+
+  vim.cmd([[ redraw ]])
+end
+
+local function setup_handlers()
+  debounce_timer = nil
+
+  local height = math.floor(vim.o.lines * 0.3)
+  local col_width = calc_col_width()
+  open_and_setup_win(height)
+
   local tbl = {}
   for _ = 0, height do
     tbl[#tbl + 1] = (' '):rep(vim.o.columns)
   end
   n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
-  vim.cmd([[ redraw ]])
 
   M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, {
     callback = function()
+      if not M.winid then
+        open_and_setup_win(height)
+      end
+
+      -- Clear window
       n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
       local input = f.getcmdline()
@@ -91,6 +105,14 @@ local function setup_handlers()
         return ret
       end, completions)
 
+      -- Don't show completion window if there are no completions.
+      if vim.tbl_isempty(completions) then
+        n.win_close(M.winid, true)
+        M.winid = nil
+
+        return
+      end
+
       local i = 1
       for line = 0, height do
         for col = 0, math.floor(vim.o.columns / col_width) - 1 do
@@ -115,6 +137,8 @@ end
 local function teardown_handlers()
   n.del_autocmd(M.cmdline_changed_autocmd)
   n.win_close(M.winid, true)
+  M.winid = nil
+
   n.buf_set_lines(M.wbufnr, 0, -1, true, {})
 end
 
