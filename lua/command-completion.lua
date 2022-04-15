@@ -32,6 +32,8 @@ local current_completions = {}
 local current_selection = 1
 local debounce_timer
 local cmdline_changed_disabled = false
+local in_that_cursed_cmdwin = false
+local enter_aucmd_id, leave_aucmd_id
 local search_hl_nsid = n.create_namespace('__ccs_hls_namespace_search___')
 local directory_hl_nsid = n.create_namespace('__ccs_hls_namespace_directory___')
 
@@ -69,6 +71,9 @@ end
 
 local function setup_handlers()
   debounce_timer = nil
+  if in_that_cursed_cmdwin then
+    return
+  end
 
   local height = math.floor(vim.o.lines * 0.3)
   local col_width = calc_col_width()
@@ -187,17 +192,20 @@ local function setup_handlers()
 end
 
 local function teardown_handlers()
-  n.del_autocmd(M.cmdline_changed_autocmd)
+  if M.cmdline_changed_autocmd then
+    n.del_autocmd(M.cmdline_changed_autocmd)
+    M.cmdline_changed_autocmd = nil
+  end
   if M.winid then -- TODO(smolck): Check if n.win_is_valid(M.winid)?
     n.win_close(M.winid, true)
   end
   M.winid = nil
   current_selection = 1
 
-  n.buf_set_lines(M.wbufnr, 0, -1, true, {})
+  if M.wbufnr then
+    n.buf_set_lines(M.wbufnr, 0, -1, true, {})
+  end
 end
-
-local enter_aucmd_id, leave_aucmd_id
 
 function M.setup(opts)
   opts = opts or {}
@@ -254,6 +262,16 @@ function M.setup(opts)
     end)
   end
 
+  n.create_autocmd({ 'CmdwinEnter' }, {
+    callback = function()
+      in_that_cursed_cmdwin = true
+    end
+  })
+  n.create_autocmd({ 'CmdwinLeave' }, {
+    callback = function()
+      in_that_cursed_cmdwin = false
+    end
+  })
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
@@ -261,7 +279,7 @@ function M.setup(opts)
       end
     end,
   })
-  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave', 'CmdwinLeave' }, {
+  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
         if debounce_timer then
