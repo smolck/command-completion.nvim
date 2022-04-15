@@ -233,22 +233,11 @@ function M.setup(opts)
 
       -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
       local cmdline = f.getcmdline()
-      local everything_but_last = vim.split(cmdline, ' ')
-      everything_but_last[#everything_but_last] = nil -- Remove last entry
-
-      local new_cmdline
-      if vim.tbl_isempty(everything_but_last) then
-        new_cmdline = [[<C-\>e"]] .. current_completions[current_selection].full_completion .. [["<cr>]]
-      else
-        new_cmdline = [[<C-\>e"]]
-          .. table.concat(everything_but_last, ' ')
-          .. ' '
-          .. current_completions[current_selection].full_completion
-          .. [["<cr>]]
-      end
+      local last_word_len = vim.split(cmdline, ' ')
+      last_word_len = string.len(last_word_len[#last_word_len])
 
       cmdline_changed_disabled = true
-      vim.api.nvim_input(new_cmdline)
+      vim.api.nvim_input(('<BS>'):rep(last_word_len) .. current_completions[current_selection].full_completion)
 
       -- This is necessary, from @gpanders on matrix:
       --
