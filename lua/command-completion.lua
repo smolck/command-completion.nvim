@@ -82,6 +82,7 @@ local function setup_handlers()
           i = i + 1
         end
       end
+      n.win_set_height(M.winid, math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
       vim.cmd([[ redraw ]])
     end,
   })
