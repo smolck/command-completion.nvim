@@ -1,14 +1,6 @@
 local M = {}
 local f = vim.fn
 
-local user_opts = {
-  border = false,
-  max_col_num = 5,
-  min_col_width = 20,
-}
-
-local debounce_timer
-
 local n = setmetatable({}, {
   __index = function(_, k)
     local maybe_thing = vim.api[k]
@@ -25,6 +17,18 @@ local n = setmetatable({}, {
     end
   end,
 })
+
+local user_opts = {
+  border = false,
+  max_col_num = 5,
+  min_col_width = 20,
+  use_matchfuzzy = true,
+  highlight_selection = true,
+  highlight_directories = true,
+}
+
+local debounce_timer
+local ccs_hls_namespace = n.create_namespace('__ccs_hls_namespace___')
 
 local function calc_col_width()
   local col_width
@@ -83,10 +87,20 @@ local function setup_handlers()
       local input = f.getcmdline()
       local completions = f.getcompletion(input, 'cmdline')
 
+      -- TODO(smolck): No clue if this really helps much if at all but we'll use it
+      -- by default for now
+      if user_opts.use_matchfuzzy then
+        local split = vim.split(input, ' ')
+        local str_to_match = split[#split]
+
+        completions = vim.fn.matchfuzzy(completions, str_to_match)
+      end
+
       -- TODO(smolck): This *should* only apply to suggestions that are files, but
       -- I'm not totally sure if that's right so might need to be properly tested.
       -- (Or maybe find a better way of cutting down filepath suggestions to their tails?)
       completions = vim.tbl_map(function(c)
+        local is_directory = vim.fn.isdirectory(f.fnamemodify(c, ':p')) == 1
         local f1 = f.fnamemodify(c, ':p:t')
 
         local ret
@@ -102,7 +116,7 @@ local function setup_handlers()
           ret = string.sub(ret, 1, col_width - 5) .. '...'
         end
 
-        return ret
+        return { completion = ret, is_directory = is_directory }
       end, completions)
 
       -- Don't show completion window if there are no completions.
@@ -119,11 +133,17 @@ local function setup_handlers()
           if i > #completions then
             break
           end
-          local end_col = col * col_width + string.len(completions[i])
+          local end_col = col * col_width + string.len(completions[i].completion)
           if end_col > vim.o.columns then
             break
           end
-          n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i] })
+          n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
+
+          if i == 1 and user_opts.highlight_selection then
+            vim.highlight.range(M.wbufnr, ccs_hls_namespace, 'Search', { line, col * col_width }, { line, end_col }, {})
+          elseif completions[i].is_directory and user_opts.highlight_directories then
+            vim.highlight.range(M.wbufnr, ccs_hls_namespace, 'Directory', { line, col * col_width }, { line, end_col }, {})
+          end
 
           i = i + 1
         end
@@ -136,7 +156,9 @@ end
 
 local function teardown_handlers()
   n.del_autocmd(M.cmdline_changed_autocmd)
-  n.win_close(M.winid, true)
+  if M.winid then -- TODO(smolck): Check if n.win_is_valid(M.winid)?
+    n.win_close(M.winid, true)
+  end
   M.winid = nil
 
   n.buf_set_lines(M.wbufnr, 0, -1, true, {})
