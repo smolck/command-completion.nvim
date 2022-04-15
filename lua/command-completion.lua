@@ -80,105 +80,110 @@ local function setup_handlers()
   end
   n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
+  local function autocmd_cb()
+    if cmdline_changed_disabled then
+      return
+    end
+
+    if not M.winid then
+      open_and_setup_win(height)
+    end
+
+    -- Clear window
+    n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
+
+    local input = f.getcmdline()
+    local completions = f.getcompletion(input, 'cmdline')
+
+    -- TODO(smolck): No clue if this really helps much if at all but we'll use it
+    -- by default for now
+    if user_opts.use_matchfuzzy and input ~= '' then
+      local split = vim.split(input, ' ')
+      local str_to_match = split[#split]
+
+      completions = vim.fn.matchfuzzy(completions, str_to_match)
+    end
+
+    -- TODO(smolck): This *should* only apply to suggestions that are files, but
+    -- I'm not totally sure if that's right so might need to be properly tested.
+    -- (Or maybe find a better way of cutting down filepath suggestions to their tails?)
+    completions = vim.tbl_map(function(c)
+      local is_directory = vim.fn.isdirectory(f.fnamemodify(c, ':p')) == 1
+      local f1 = f.fnamemodify(c, ':p:t')
+
+      local ret
+      if f1 == '' then
+        -- This is for filepaths like '/Users/someuser/thing/', where if you get
+        -- the tail it's just empty.
+        ret = f.fnamemodify(c, ':p:h:t')
+      else
+        ret = f1
+      end
+
+      if string.len(ret) >= col_width then
+        ret = string.sub(ret, 1, col_width - 5) .. '...'
+      end
+
+      return { completion = ret, is_directory = is_directory, full_completion = c }
+    end, completions)
+
+    current_completions = {}
+    current_selection = -1
+
+    -- Don't show completion window if there are no completions.
+    if vim.tbl_isempty(completions) then
+      n.win_close(M.winid, true)
+      M.winid = nil
+
+      return
+    end
+
+    local i = 1
+    for line = 0, height - 1 do
+      for col = 0, math.floor(vim.o.columns / col_width) - 1 do
+        if i > #completions then
+          break
+        end
+        local end_col = col * col_width + string.len(completions[i].completion)
+        if end_col > vim.o.columns then
+          break
+        end
+        n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
+
+        current_completions[i] = {
+          start = { line, col * col_width },
+          finish = { line, end_col },
+          full_completion = completions[i].full_completion,
+        }
+
+        if i == current_selection and user_opts.highlight_selection then
+          vim.highlight.range(M.wbufnr, search_hl_nsid, 'Search', { line, col * col_width }, { line, end_col }, {})
+        end
+
+        if completions[i].is_directory and user_opts.highlight_directories then
+          vim.highlight.range(
+            M.wbufnr,
+            directory_hl_nsid,
+            'Directory',
+            { line, col * col_width },
+            { line, end_col },
+            {}
+          )
+        end
+
+        i = i + 1
+      end
+    end
+    n.win_set_height(M.winid, math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
+    vim.cmd('redraw')
+  end
+
   M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, {
-    callback = function()
-      if cmdline_changed_disabled then
-        return
-      end
-
-      if not M.winid then
-        open_and_setup_win(height)
-      end
-
-      -- Clear window
-      n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
-
-      local input = f.getcmdline()
-      local completions = f.getcompletion(input, 'cmdline')
-
-      -- TODO(smolck): No clue if this really helps much if at all but we'll use it
-      -- by default for now
-      if user_opts.use_matchfuzzy then
-        local split = vim.split(input, ' ')
-        local str_to_match = split[#split]
-
-        completions = vim.fn.matchfuzzy(completions, str_to_match)
-      end
-
-      -- TODO(smolck): This *should* only apply to suggestions that are files, but
-      -- I'm not totally sure if that's right so might need to be properly tested.
-      -- (Or maybe find a better way of cutting down filepath suggestions to their tails?)
-      completions = vim.tbl_map(function(c)
-        local is_directory = vim.fn.isdirectory(f.fnamemodify(c, ':p')) == 1
-        local f1 = f.fnamemodify(c, ':p:t')
-
-        local ret
-        if f1 == '' then
-          -- This is for filepaths like '/Users/someuser/thing/', where if you get
-          -- the tail it's just empty.
-          ret = f.fnamemodify(c, ':p:h:t')
-        else
-          ret = f1
-        end
-
-        if string.len(ret) >= col_width then
-          ret = string.sub(ret, 1, col_width - 5) .. '...'
-        end
-
-        return { completion = ret, is_directory = is_directory, full_completion = c }
-      end, completions)
-
-      current_completions = {}
-      current_selection = -1
-
-      -- Don't show completion window if there are no completions.
-      if vim.tbl_isempty(completions) then
-        n.win_close(M.winid, true)
-        M.winid = nil
-
-        return
-      end
-
-      local i = 1
-      for line = 0, height - 1 do
-        for col = 0, math.floor(vim.o.columns / col_width) - 1 do
-          if i > #completions then
-            break
-          end
-          local end_col = col * col_width + string.len(completions[i].completion)
-          if end_col > vim.o.columns then
-            break
-          end
-          n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
-
-          current_completions[i] = {
-            start = { line, col * col_width },
-            finish = { line, end_col },
-            full_completion = completions[i].full_completion,
-          }
-
-          if i == current_selection and user_opts.highlight_selection then
-            vim.highlight.range(M.wbufnr, search_hl_nsid, 'Search', { line, col * col_width }, { line, end_col }, {})
-          end
-
-          if completions[i].is_directory and user_opts.highlight_directories then
-            vim.highlight.range(
-              M.wbufnr,
-              directory_hl_nsid,
-              'Directory',
-              { line, col * col_width },
-              { line, end_col },
-              {}
-            )
-          end
-
-          i = i + 1
-        end
-      end
-      n.win_set_height(M.winid, math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
-      vim.cmd('redraw')
-    end,
+    callback = autocmd_cb,
   })
+
+  -- Initial completions when cmdline is already open and empty
+  autocmd_cb()
 end
 
 local function teardown_handlers()
