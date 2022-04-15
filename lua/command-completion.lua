@@ -25,10 +25,15 @@ local user_opts = {
   use_matchfuzzy = true,
   highlight_selection = true,
   highlight_directories = true,
+  tab_completion = true,
 }
 
+local current_completions = {}
+local current_selection = 1
 local debounce_timer
-local ccs_hls_namespace = n.create_namespace('__ccs_hls_namespace___')
+local cmdline_changed_disabled = false
+local search_hl_nsid = n.create_namespace('__ccs_hls_namespace_search___')
+local directory_hl_nsid = n.create_namespace('__ccs_hls_namespace_directory___')
 
 local function calc_col_width()
   local col_width
@@ -59,7 +64,7 @@ local function open_and_setup_win(height)
     col = 0,
   })
 
-  vim.cmd([[ redraw ]])
+  vim.cmd('redraw')
 end
 
 local function setup_handlers()
@@ -77,6 +82,10 @@ local function setup_handlers()
 
   M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, {
     callback = function()
+      if cmdline_changed_disabled then
+        return
+      end
+
       if not M.winid then
         open_and_setup_win(height)
       end
@@ -116,8 +125,11 @@ local function setup_handlers()
           ret = string.sub(ret, 1, col_width - 5) .. '...'
         end
 
-        return { completion = ret, is_directory = is_directory }
+        return { completion = ret, is_directory = is_directory, full_completion = c }
       end, completions)
+
+      current_completions = {}
+      current_selection = -1
 
       -- Don't show completion window if there are no completions.
       if vim.tbl_isempty(completions) then
@@ -128,7 +140,7 @@ local function setup_handlers()
       end
 
       local i = 1
-      for line = 0, height do
+      for line = 0, height - 1 do
         for col = 0, math.floor(vim.o.columns / col_width) - 1 do
           if i > #completions then
             break
@@ -139,12 +151,20 @@ local function setup_handlers()
           end
           n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
 
-          if i == 1 and user_opts.highlight_selection then
-            vim.highlight.range(M.wbufnr, ccs_hls_namespace, 'Search', { line, col * col_width }, { line, end_col }, {})
-          elseif completions[i].is_directory and user_opts.highlight_directories then
+          current_completions[i] = {
+            start = { line, col * col_width },
+            finish = { line, end_col },
+            full_completion = completions[i].full_completion,
+          }
+
+          if i == current_selection and user_opts.highlight_selection then
+            vim.highlight.range(M.wbufnr, search_hl_nsid, 'Search', { line, col * col_width }, { line, end_col }, {})
+          end
+
+          if completions[i].is_directory and user_opts.highlight_directories then
             vim.highlight.range(
               M.wbufnr,
-              ccs_hls_namespace,
+              directory_hl_nsid,
               'Directory',
               { line, col * col_width },
               { line, end_col },
@@ -156,7 +176,7 @@ local function setup_handlers()
         end
       end
       n.win_set_height(M.winid, math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
-      vim.cmd([[ redraw ]])
+      vim.cmd('redraw')
     end,
   })
 end
@@ -167,6 +187,7 @@ local function teardown_handlers()
     n.win_close(M.winid, true)
   end
   M.winid = nil
+  current_selection = 1
 
   n.buf_set_lines(M.wbufnr, 0, -1, true, {})
 end
@@ -177,6 +198,66 @@ function M.setup(opts)
   opts = opts or {}
   for k, v in pairs(opts) do
     user_opts[k] = v
+  end
+
+  if user_opts.tab_completion then
+    vim.keymap.set('c', '<Tab>', function()
+      if vim.tbl_isempty(current_completions) then
+        current_selection = 1
+        return
+      end
+
+      if current_selection == -1 then
+        -- TODO(smolck): This comment might not *quite* be accurate.
+        -- Means we just reset this back to the first completion from the CmdlineChanged autocmd
+        current_selection = 1
+      else
+        current_selection = current_selection + 1 > #current_completions and 1 or current_selection + 1
+      end
+
+      n.buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
+      vim.highlight.range(
+        M.wbufnr,
+        search_hl_nsid,
+        'Search',
+        current_completions[current_selection].start,
+        current_completions[current_selection].finish,
+        {}
+      )
+      vim.cmd('redraw')
+
+      -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
+      local cmdline = f.getcmdline()
+      local everything_but_last = vim.split(cmdline, ' ')
+      everything_but_last[#everything_but_last] = nil -- Remove last entry
+
+      local new_cmdline
+      if vim.tbl_isempty(everything_but_last) then
+        new_cmdline = [[<C-\>e"]] .. current_completions[current_selection].full_completion .. [["<cr>]]
+      else
+        new_cmdline = [[<C-\>e"]]
+          .. table.concat(everything_but_last, ' ')
+          .. ' '
+          .. current_completions[current_selection].full_completion
+          .. [["<cr>]]
+      end
+
+      cmdline_changed_disabled = true
+      vim.api.nvim_input(new_cmdline)
+
+      -- This is necessary, from @gpanders on matrix:
+      --
+      -- """
+      -- what's probably happening is you are ignoring CmdlineChanged, running your function, and then removing it before the event loop has a chance to turn
+      -- so you should instead ignore the event, run your callback, let the event loop turn, and then remove it
+      -- which is what vim.schedule is for
+      -- """
+      --
+      -- Just :%s/ignoring CmdlineChanged/setting cmdline_changed_disabled etc.
+      vim.schedule(function()
+        cmdline_changed_disabled = false
+      end)
+    end)
   end
 
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
