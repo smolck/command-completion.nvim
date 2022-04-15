@@ -2,8 +2,12 @@ local M = {}
 local f = vim.fn
 
 local user_opts = {
-  border = false
+  border = false,
+  max_col_num = 5,
+  min_col_width = 20,
 }
+
+local debounce_timer
 
 local n = setmetatable({}, {
   __index = function(_, k)
@@ -22,13 +26,25 @@ local n = setmetatable({}, {
   end,
 })
 
-local debounce_timer
+local function calc_col_width()
+  local col_width
+  for i = 1, user_opts.max_col_num do
+    local test_width = math.floor(vim.o.columns / i)
+    if test_width <= user_opts.min_col_width then
+      return col_width
+    else
+      col_width = test_width
+    end
+  end
+
+  return col_width
+end
 
 local function setup_handlers()
   debounce_timer = nil
 
   local height = math.floor(vim.o.lines * 0.3)
-  local col_width = math.floor(vim.o.columns / 6)
+  local col_width = calc_col_width()
   M.wbufnr = n.create_buf(false, true)
   M.winid = n.open_win(M.wbufnr, false, {
     relative = 'editor',
@@ -58,13 +74,21 @@ local function setup_handlers()
       -- (Or maybe find a better way of cutting down filepath suggestions to their tails?)
       completions = vim.tbl_map(function(c)
         local f1 = f.fnamemodify(c, ':p:t')
+
+        local ret
         if f1 == '' then
           -- This is for filepaths like '/Users/someuser/thing/', where if you get
           -- the tail it's just empty.
-          return f.fnamemodify(c, ':p:h:t')
+          ret = f.fnamemodify(c, ':p:h:t')
         else
-          return f1
+          ret = f1
         end
+
+        if string.len(ret) >= col_width then
+          ret = string.sub(ret, 1, col_width - 5) .. '...'
+        end
+
+        return ret
       end, completions)
 
       local i = 1
@@ -98,8 +122,8 @@ local enter_aucmd_id, leave_aucmd_id
 
 function M.setup(opts)
   opts = opts or {}
-  if opts.border then
-    user_opts.border = opts.border
+  for k, v in pairs(opts) do
+    user_opts[k] = v
   end
 
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
