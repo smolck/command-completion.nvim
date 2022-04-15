@@ -142,7 +142,14 @@ local function setup_handlers()
           if i == 1 and user_opts.highlight_selection then
             vim.highlight.range(M.wbufnr, ccs_hls_namespace, 'Search', { line, col * col_width }, { line, end_col }, {})
           elseif completions[i].is_directory and user_opts.highlight_directories then
-            vim.highlight.range(M.wbufnr, ccs_hls_namespace, 'Directory', { line, col * col_width }, { line, end_col }, {})
+            vim.highlight.range(
+              M.wbufnr,
+              ccs_hls_namespace,
+              'Directory',
+              { line, col * col_width },
+              { line, end_col },
+              {}
+            )
           end
 
           i = i + 1
