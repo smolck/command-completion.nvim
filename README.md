@@ -2,6 +2,10 @@
 
 ![Example screenshot](https://user-images.githubusercontent.com/46855713/163622605-30762e31-1ca8-4f94-9d7c-59d2889d8c89.png)
 
+# Disclaimer
+
+This plugin breaks things pretty severely if you `CTRL-F` from the command line into the cmdwin. Honestly any cmdwin usage and this could completely break. So . . . either don't do that, or wait until someone fixes the cmdwin upstream to play nice with floating windows & API functions etc. (which I plan on taking a stab at soon, but no promises).
+
 # Setup
 
 1. Install `'smolck/command-completion.nvim'` with your favorite plugin manager.
