@@ -197,7 +197,11 @@ local function teardown_handlers()
     M.cmdline_changed_autocmd = nil
   end
   if M.winid then -- TODO(smolck): Check if n.win_is_valid(M.winid)?
-    n.win_close(M.winid, true)
+    if in_that_cursed_cmdwin then
+      n.win_hide(M.winid) -- Idk but it works
+    else
+      n.win_close(M.winid, true)
+    end
   end
   M.winid = nil
   current_selection = 1
@@ -265,12 +269,17 @@ function M.setup(opts)
   n.create_autocmd({ 'CmdwinEnter' }, {
     callback = function()
       in_that_cursed_cmdwin = true
-    end
+
+      -- Could also be entering cmdwin from cmdline so handle that
+      if M.winid then
+        teardown_handlers()
+      end
+    end,
   })
   n.create_autocmd({ 'CmdwinLeave' }, {
     callback = function()
       in_that_cursed_cmdwin = false
-    end
+    end,
   })
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
