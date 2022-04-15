@@ -19,7 +19,7 @@ local n = setmetatable({}, {
 })
 
 local user_opts = {
-  border = false,
+  border = nil,
   max_col_num = 5,
   min_col_width = 20,
   use_matchfuzzy = true,
@@ -56,7 +56,7 @@ local function open_and_setup_win(height)
 
   M.winid = n.open_win(M.wbufnr, false, {
     relative = 'editor',
-    border = user_opts.border and 'single' or nil,
+    border = user_opts.border,
     style = 'minimal',
     width = vim.o.columns,
     height = height,
