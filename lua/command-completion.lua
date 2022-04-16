@@ -214,9 +214,10 @@ local function teardown_handlers()
 
   if M.winid then -- TODO(smolck): Check if n.win_is_valid(M.winid)?
     if in_that_cursed_cmdwin then
-      n.win_hide(M.winid) -- Idk but it works (EDIT: NOT REALLY this is probably quite bad, so prepare for breakge
+      -- Idk but this "works" (EDIT: NOT REALLY this is probably quite bad, so prepare for breakge
       -- just gotta fix this upstream I guess by making cmdwin sane with float and stuff
       -- TODO(smolck): come back once you've hopefully done that upstream)
+      n.win_hide(M.winid)
     else
       n.win_close(M.winid, true)
     end
