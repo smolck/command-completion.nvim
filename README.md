@@ -6,6 +6,10 @@
 
 This plugin breaks things pretty severely if you `CTRL-F` from the command line into the cmdwin. Honestly any cmdwin usage and this could completely break. So . . . either don't do that, or wait until someone fixes the cmdwin upstream to play nice with floating windows & API functions etc. (which I plan on taking a stab at soon, but no promises).
 
+# Requirements
+
+* Neovim v0.7 or later
+
 # Setup
 
 1. Install `'smolck/command-completion.nvim'` with your favorite plugin manager.
