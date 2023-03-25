@@ -30,8 +30,8 @@ require('command-completion').setup {
                                 -- selected item, not sure why this is an option tbh
     highlight_directories = true, -- Whether or not to higlight directories with
                                   -- the Directory highlight group (`:help hl-Directory`)
-	mapping_next = "<Tab>", –– set mapping for moving cursor to next item
-	mapping_prev = "<S-Tab>", -- set mapping for moving cursor to previous item
+    mapping_next = "<Tab>", –– set mapping for moving cursor to next item
+    mapping_prev = "<S-Tab>", -- set mapping for moving cursor to previous item
     completion = true, -- Whether or not completion on displayed items is enabled
 }
 ```
