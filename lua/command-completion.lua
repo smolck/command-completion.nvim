@@ -25,7 +25,9 @@ local user_opts = {
   use_matchfuzzy = true,
   highlight_selection = true,
   highlight_directories = true,
-  tab_completion = true,
+  mapping_next = "<Tab>",
+  mapping_prev = "<S-Tab>",
+  completion = true,
 }
 
 local current_completions = {}
@@ -191,6 +193,40 @@ local function setup_handlers()
   autocmd_cb()
 end
 
+local function change_item()
+  n.buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
+  vim.highlight.range(
+	M.wbufnr,
+	search_hl_nsid,
+	'Search',
+	current_completions[current_selection].start,
+	current_completions[current_selection].finish,
+	{}
+  )
+  vim.cmd('redraw')
+
+  -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
+  local cmdline = f.getcmdline()
+  local last_word_len = vim.split(cmdline, ' ')
+  last_word_len = string.len(last_word_len[#last_word_len])
+
+  cmdline_changed_disabled = true
+  vim.api.nvim_input(('<BS>'):rep(last_word_len) .. current_completions[current_selection].full_completion)
+
+  -- This is necessary, from @gpanders on matrix:
+  --
+  -- """
+  -- what's probably happening is you are ignoring CmdlineChanged, running your function, and then removing it before the event loop has a chance to turn
+  -- so you should instead ignore the event, run your callback, let the event loop turn, and then remove it
+  -- which is what vim.schedule is for
+  -- """
+  --
+  -- Just :%s/ignoring CmdlineChanged/setting cmdline_changed_disabled etc.
+  vim.schedule(function()
+	cmdline_changed_disabled = false
+  end)
+end
+
 local function teardown_handlers()
   if M.cmdline_changed_autocmd then
     n.del_autocmd(M.cmdline_changed_autocmd)
@@ -219,8 +255,8 @@ function M.setup(opts)
     user_opts[k] = v
   end
 
-  if user_opts.tab_completion then
-    vim.keymap.set('c', '<Tab>', function()
+  if user_opts.completion then
+    vim.keymap.set('c', user_opts.mapping_next, function()
       if vim.tbl_isempty(current_completions) then
         current_selection = 1
         return
@@ -234,37 +270,24 @@ function M.setup(opts)
         current_selection = current_selection + 1 > #current_completions and 1 or current_selection + 1
       end
 
-      n.buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
-      vim.highlight.range(
-        M.wbufnr,
-        search_hl_nsid,
-        'Search',
-        current_completions[current_selection].start,
-        current_completions[current_selection].finish,
-        {}
-      )
-      vim.cmd('redraw')
+	  change_item()
+    end)
 
-      -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
-      local cmdline = f.getcmdline()
-      local last_word_len = vim.split(cmdline, ' ')
-      last_word_len = string.len(last_word_len[#last_word_len])
+    vim.keymap.set('c', user_opts.mapping_prev, function()
+      if vim.tbl_isempty(current_completions) then
+        current_selection = 1
+        return
+      end
 
-      cmdline_changed_disabled = true
-      vim.api.nvim_input(('<BS>'):rep(last_word_len) .. current_completions[current_selection].full_completion)
+      if current_selection == -1 then
+        -- TODO(smolck): This comment might not *quite* be accurate.
+        -- Means we just reset this back to the first completion from the CmdlineChanged autocmd
+        current_selection = 1
+      else
+        current_selection = current_selection - 1 <= 0 and #current_completions or current_selection - 1
+      end
 
-      -- This is necessary, from @gpanders on matrix:
-      --
-      -- """
-      -- what's probably happening is you are ignoring CmdlineChanged, running your function, and then removing it before the event loop has a chance to turn
-      -- so you should instead ignore the event, run your callback, let the event loop turn, and then remove it
-      -- which is what vim.schedule is for
-      -- """
-      --
-      -- Just :%s/ignoring CmdlineChanged/setting cmdline_changed_disabled etc.
-      vim.schedule(function()
-        cmdline_changed_disabled = false
-      end)
+	  change_item()
     end)
   end
 
@@ -316,7 +339,8 @@ function M.disable()
     leave_aucmd_id = nil
   end
 
-  vim.keymap.del('c', '<Tab>')
+  vim.keymap.del('c', user_opts.mapping_next)
+  vim.keymap.del('c', user_opts.mapping_prev)
 end
 
 return M
