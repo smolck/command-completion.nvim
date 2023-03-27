@@ -12,7 +12,7 @@ This plugin breaks things pretty severely if you `CTRL-F` from the command line 
 
 # Setup
 
-1. Install `'smolck/command-completion.nvim'` with your favorite plugin manager.
+1. Install `'JarKz/command-completion.nvim'` with your favorite plugin manager.
 2. Add `require('command-completion').setup()` to your `init.lua` (or `lua require('command-completion').setup()` to your `init.vim`).
 
 # Options
@@ -22,8 +22,8 @@ Here's a list of the available configuration options with their defaults:
 require('command-completion').setup {
     border = nil, -- What kind of border to use, passed through directly to `nvim_open_win()`,
                   -- see `:help nvim_open_win()` for available options (e.g. 'single', 'double', etc.)
-    max_col_num = 5, -- Maximum number of columns to display in the completion window
-    min_col_width = 20, -- Minimum width of completion window columns
+    total_rows = 3, -- count of rows in completion window
+    total_columns = 5, -- count of columns in completion window
     use_matchfuzzy = true, -- Whether or not to use `matchfuzzy()` (see `:help matchfuzzy()`) 
                            -- to order completion results
     highlight_selection = true, -- Whether or not to highlight the currently
