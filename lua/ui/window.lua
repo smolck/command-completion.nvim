@@ -81,10 +81,10 @@ end
 
 local Calculator = require('ui.calculate_win')
 
-function Window.render_window(current_completions, completions, height, total_columns)
+function Window.render_window(current_completions, completions, total_rows, total_columns)
 	local col_width = Calculator.calculate_column_width(total_columns)
 	local completion_index = 1
-	for line = 0, height - 1 do
+	for line = 0, total_rows - 1 do
 	  for column = 0, total_columns - 1 do
 		if completion_index > #completions then
 		  break
@@ -125,6 +125,7 @@ function Window.render_window(current_completions, completions, height, total_co
 	if rows_with_spaces < 0 then
 		rows_with_spaces = 0
 	end
+	local height = total_rows * 2 - 1
 	window_nvim_commands.win_set_height(window_id, math.min(rows_with_spaces, height))
 	vim.cmd('redraw')
 
